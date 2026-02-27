@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { Play, Download, CheckCircle, XCircle, RefreshCw, Filter, ChevronDown, ChevronUp, Shield, Cloud } from 'lucide-react';
 import type { LocalStudent, LocalSoldier, EnrichedMatch } from '../lib/supabase-secure';
 import { runSecureMatchingAlgorithm } from '../lib/matchingAlgorithm-secure';
+import type { MatchingSummary } from '../lib/matchingAlgorithm-secure';
 import { exportMatchesToExcel } from '../lib/excelParser-secure';
 
 interface MatchesPanelProps {
@@ -28,6 +29,7 @@ export default function MatchesPanel({
   const [sortField, setSortField] = useState<SortField>('confidence_score');
   const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
   const [expandedMatch, setExpandedMatch] = useState<string | null>(null);
+  const [matchingSummary, setMatchingSummary] = useState<MatchingSummary | null>(null);
 
   const runMatching = async () => {
     if (students.length === 0 || soldiers.length === 0) {
@@ -36,17 +38,18 @@ export default function MatchesPanel({
     }
 
     setIsLoading(true);
-    
+
     try {
       // Small delay to show loading state
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       // Run SECURE matching algorithm (works with codes only)
-      const newMatches = runSecureMatchingAlgorithm(students, soldiers);
+      const { matches: newMatches, summary } = runSecureMatchingAlgorithm(students, soldiers);
       setMatches(newMatches);
-      
+      setMatchingSummary(summary);
+
       if (newMatches.length === 0) {
-        alert('לא נמצאו התאמות אפשריות. ודא שיש סטודנטים עם מקומות פנויים וחיילים ממתינים לשיבוץ.');
+        alert('לא נמצאו התאמות אפשריות.');
       }
     } catch (err) {
       console.error('Matching error:', err);
@@ -206,7 +209,7 @@ export default function MatchesPanel({
           {matches.length > 0 && (
             <button 
               className="btn btn-outline"
-              onClick={() => setMatches([])}
+              onClick={() => { setMatches([]); setMatchingSummary(null); }}
             >
               <RefreshCw size={20} />
               נקה
@@ -220,6 +223,42 @@ export default function MatchesPanel({
         <div className="security-info-bar">
           <Shield size={16} />
           <span>ההתאמה מבוססת על קודים בלבד. המידע האישי (שמות, טלפונים) מוצג מהנתונים המקומיים.</span>
+        </div>
+      )}
+
+      {matchingSummary && matches.length > 0 && (
+        <div className="matching-summary">
+          <h3>סיכום הרצה</h3>
+          <div className="summary-grid">
+            <div className="summary-section">
+              <h4>נתוני קלט</h4>
+              <p><strong>{matchingSummary.totalStudents}</strong> סטודנטים</p>
+              <p><strong>{matchingSummary.totalSoldiers}</strong> חיילים</p>
+            </div>
+            <div className="summary-section">
+              <h4>כיסוי חיילים</h4>
+              <p className="summary-highlight success"><strong>{matchingSummary.soldiersWithTwoMatches}</strong> חיילים עם 2 התאמות</p>
+              {matchingSummary.soldiersWithOneMatch > 0 && (
+                <p className="summary-highlight warning"><strong>{matchingSummary.soldiersWithOneMatch}</strong> חיילים עם התאמה אחת</p>
+              )}
+              {matchingSummary.soldiersWithNoMatch > 0 && (
+                <p className="summary-highlight danger"><strong>{matchingSummary.soldiersWithNoMatch}</strong> חיילים ללא התאמה</p>
+              )}
+            </div>
+            <div className="summary-section">
+              <h4>שימוש בסטודנטים</h4>
+              <p><strong>{matchingSummary.studentsUsed}</strong> סטודנטים שובצו</p>
+              <p><strong>{matchingSummary.studentsNotUsed}</strong> סטודנטים לא שובצו</p>
+            </div>
+            <div className="summary-section">
+              <h4>איכות התאמות</h4>
+              <p>ציון ממוצע: <strong>{matchingSummary.avgScore}%</strong></p>
+              <p className="score-high"><strong>{matchingSummary.highScoreMatches}</strong> גבוה (70%+)</p>
+              <p className="score-medium"><strong>{matchingSummary.mediumScoreMatches}</strong> בינוני (30-69%)</p>
+              <p className="score-low"><strong>{matchingSummary.lowScoreMatches}</strong> נמוך (&lt;30%)</p>
+            </div>
+          </div>
+          <p className="summary-total">סה"כ <strong>{matchingSummary.totalMatches}</strong> התאמות נוצרו</p>
         </div>
       )}
 

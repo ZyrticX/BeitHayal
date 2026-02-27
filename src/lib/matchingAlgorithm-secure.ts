@@ -151,14 +151,14 @@ export function findAllSecureMatches(
       return a.student.current_soldiers_count - b.student.current_soldiers_count;
     });
 
-    // Keep top 5 candidates
-    matchesBySoldier.set(soldier.contact_id, candidates.slice(0, 5));
+    // Keep top 10 candidates to ensure enough options for 2 matches
+    matchesBySoldier.set(soldier.contact_id, candidates.slice(0, 10));
   }
 
   return matchesBySoldier;
 }
 
-// Optimize matches to avoid over-assigning students
+// Optimize matches - ensure every soldier gets exactly 2 matches
 export function optimizeSecureMatches(
   matchesBySoldier: Map<string, MatchCandidate[]>,
   students: LocalStudent[]
@@ -179,16 +179,21 @@ export function optimizeSecureMatches(
   for (const { candidates } of soldiersWithOptions) {
     if (candidates.length === 0) continue;
 
-    let rank = 1;
-    let assigned = false;
+    const assignedForSoldier: EnrichedMatch[] = [];
 
+    // First pass: try to assign respecting student capacity
     for (const candidate of candidates) {
+      if (assignedForSoldier.length >= 2) break;
+
       const studentId = candidate.student.contact_id;
       const currentCount = studentAssignments.get(studentId) || 0;
       const maxCount = candidate.student.is_scholarship_active ? 2 : 4;
 
+      // Skip if this student is already assigned to this soldier
+      if (assignedForSoldier.some(m => m.student_external_id === studentId)) continue;
+
       if (currentCount < maxCount) {
-        // Create match record
+        const rank = assignedForSoldier.length + 1;
         const match: EnrichedMatch = {
           id: crypto.randomUUID(),
           student_external_id: candidate.student.contact_id,
@@ -197,56 +202,77 @@ export function optimizeSecureMatches(
           match_rank: rank,
           match_criteria: candidate.criteria,
           status: 'suggested',
-
-          // Local data for display (NOT sent to cloud)
           student: candidate.student,
           soldier: candidate.soldier,
         };
 
-        result.push(match);
+        assignedForSoldier.push(match);
 
-        // Update assignment count only for rank 1 (primary match)
+        // Update assignment count only for rank 1
         if (rank === 1) {
           studentAssignments.set(studentId, currentCount + 1);
-          assigned = true;
         }
-
-        rank++;
-
-        // Keep max 2 options per soldier
-        if (rank > 2) break;
       }
     }
 
-    // Fallback: if no match was created (all students full), force-assign best candidate
-    if (!assigned && candidates.length > 0) {
-      const best = candidates[0];
-      const match: EnrichedMatch = {
-        id: crypto.randomUUID(),
-        student_external_id: best.student.contact_id,
-        soldier_external_id: best.soldier.contact_id,
-        confidence_score: best.score,
-        match_rank: 1,
-        match_criteria: best.criteria,
-        status: 'suggested',
-        student: best.student,
-        soldier: best.soldier,
-      };
-      result.push(match);
-      const currentCount = studentAssignments.get(best.student.contact_id) || 0;
-      studentAssignments.set(best.student.contact_id, currentCount + 1);
+    // Second pass: force-assign if we don't have 2 matches yet (ignore capacity)
+    if (assignedForSoldier.length < 2) {
+      for (const candidate of candidates) {
+        if (assignedForSoldier.length >= 2) break;
+
+        const studentId = candidate.student.contact_id;
+        // Skip if this student is already assigned to this soldier
+        if (assignedForSoldier.some(m => m.student_external_id === studentId)) continue;
+
+        const rank = assignedForSoldier.length + 1;
+        const match: EnrichedMatch = {
+          id: crypto.randomUUID(),
+          student_external_id: candidate.student.contact_id,
+          soldier_external_id: candidate.soldier.contact_id,
+          confidence_score: candidate.score,
+          match_rank: rank,
+          match_criteria: candidate.criteria,
+          status: 'suggested',
+          student: candidate.student,
+          soldier: candidate.soldier,
+        };
+
+        assignedForSoldier.push(match);
+
+        if (rank === 1) {
+          const currentCount = studentAssignments.get(studentId) || 0;
+          studentAssignments.set(studentId, currentCount + 1);
+        }
+      }
     }
+
+    result.push(...assignedForSoldier);
   }
 
   return result;
+}
+
+// Summary returned after matching
+export interface MatchingSummary {
+  totalStudents: number;
+  totalSoldiers: number;
+  totalMatches: number;
+  soldiersWithTwoMatches: number;
+  soldiersWithOneMatch: number;
+  soldiersWithNoMatch: number;
+  studentsUsed: number;
+  studentsNotUsed: number;
+  avgScore: number;
+  highScoreMatches: number;  // score >= 70
+  mediumScoreMatches: number; // score 30-69
+  lowScoreMatches: number;   // score < 30
 }
 
 // Main function to run secure matching
 export function runSecureMatchingAlgorithm(
   students: LocalStudent[],
   soldiers: LocalSoldier[]
-): EnrichedMatch[] {
-  // Include all students and soldiers - everyone gets a match
+): { matches: EnrichedMatch[]; summary: MatchingSummary } {
   const availableStudents = students;
   const awaitingSoldiers = soldiers;
 
@@ -255,13 +281,45 @@ export function runSecureMatchingAlgorithm(
   // Find all possible matches
   const allMatches = findAllSecureMatches(availableStudents, awaitingSoldiers);
 
-  // Optimize to avoid over-assignment
+  // Optimize - ensure every soldier gets 2 matches
   const optimizedMatches = optimizeSecureMatches(allMatches, availableStudents);
 
   // Sort by confidence score
   optimizedMatches.sort((a, b) => b.confidence_score - a.confidence_score);
 
-  return optimizedMatches;
+  // Build summary
+  const matchesBySoldierId = new Map<string, number>();
+  const usedStudentIds = new Set<string>();
+
+  for (const m of optimizedMatches) {
+    matchesBySoldierId.set(m.soldier_external_id, (matchesBySoldierId.get(m.soldier_external_id) || 0) + 1);
+    usedStudentIds.add(m.student_external_id);
+  }
+
+  const soldiersWithTwo = Array.from(matchesBySoldierId.values()).filter(c => c >= 2).length;
+  const soldiersWithOne = Array.from(matchesBySoldierId.values()).filter(c => c === 1).length;
+  const soldiersWithNone = awaitingSoldiers.length - matchesBySoldierId.size;
+
+  const totalScore = optimizedMatches.reduce((s, m) => s + m.confidence_score, 0);
+
+  const summary: MatchingSummary = {
+    totalStudents: availableStudents.length,
+    totalSoldiers: awaitingSoldiers.length,
+    totalMatches: optimizedMatches.length,
+    soldiersWithTwoMatches: soldiersWithTwo,
+    soldiersWithOneMatch: soldiersWithOne,
+    soldiersWithNoMatch: soldiersWithNone,
+    studentsUsed: usedStudentIds.size,
+    studentsNotUsed: availableStudents.length - usedStudentIds.size,
+    avgScore: optimizedMatches.length > 0 ? Math.round(totalScore / optimizedMatches.length) : 0,
+    highScoreMatches: optimizedMatches.filter(m => m.confidence_score >= 70).length,
+    mediumScoreMatches: optimizedMatches.filter(m => m.confidence_score >= 30 && m.confidence_score < 70).length,
+    lowScoreMatches: optimizedMatches.filter(m => m.confidence_score < 30).length,
+  };
+
+  console.log(`[Secure Matching] Summary:`, summary);
+
+  return { matches: optimizedMatches, summary };
 }
 
 // ===========================================

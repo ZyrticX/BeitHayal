@@ -629,6 +629,56 @@ body {
   background: var(--bg-tertiary);
 }
 
+/* Matching Summary */
+.matching-summary {
+  background: linear-gradient(135deg, #f0f9ff, #e0f2fe);
+  border: 1px solid #bae6fd;
+  border-radius: var(--border-radius);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.matching-summary h3 {
+  margin-bottom: 1rem;
+  color: var(--primary-dark);
+  font-size: 1.1rem;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.5rem;
+}
+
+.summary-section h4 {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid #bae6fd;
+  padding-bottom: 0.25rem;
+}
+
+.summary-section p {
+  font-size: 0.9rem;
+  margin: 0.25rem 0;
+}
+
+.summary-highlight.success { color: var(--success); }
+.summary-highlight.warning { color: var(--warning); }
+.summary-highlight.danger { color: var(--danger); }
+
+.score-high { color: var(--success); }
+.score-medium { color: var(--warning); }
+.score-low { color: var(--danger); }
+
+.summary-total {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid #bae6fd;
+  font-size: 1rem;
+  text-align: center;
+}
+
 .matches-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
