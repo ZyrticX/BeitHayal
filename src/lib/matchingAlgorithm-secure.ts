@@ -220,6 +220,76 @@ export function optimizeSecureMatches(
     result.push(...assignedForSoldier);
   }
 
+  // Final pass: swap in unused students to maximize coverage
+  // Find students that were never assigned
+  const usedStudentIds = new Set(result.map(m => m.student_external_id));
+  const unusedStudents = students.filter(s => !usedStudentIds.has(s.contact_id));
+
+  if (unusedStudents.length > 0) {
+    console.log(`[Secure Matching] Final pass: trying to place ${unusedStudents.length} unused students`);
+
+    // For each unused student, find the rank-2 match with the most-overloaded
+    // student and swap if possible
+    for (const unusedStudent of unusedStudents) {
+      // Find rank-2 matches where the assigned student has the most assignments
+      let bestSwapIdx = -1;
+      let bestOverload = 0;
+
+      for (let i = 0; i < result.length; i++) {
+        const match = result[i];
+        if (match.match_rank !== 2) continue;
+
+        const assignedStudentId = match.student_external_id;
+        const assignedCount = studentAssignments.get(assignedStudentId) || 0;
+
+        // Only swap if the current student is overloaded (assigned > 1)
+        if (assignedCount > bestOverload) {
+          bestOverload = assignedCount;
+          bestSwapIdx = i;
+        }
+      }
+
+      if (bestSwapIdx >= 0 && bestOverload > 1) {
+        const oldMatch = result[bestSwapIdx];
+        const soldier = oldMatch.soldier!;
+
+        // Calculate score for the unused student with this soldier
+        const newCandidate = calculateSecureMatch(unusedStudent, {
+          contact_id: oldMatch.soldier_external_id,
+          gender: soldier.gender,
+          city: soldier.city,
+          city_code: soldier.city_code,
+          region: soldier.region,
+          origin_country: soldier.origin_country,
+          mother_tongue: soldier.mother_tongue,
+          mother_tongue_code: soldier.mother_tongue_code,
+          language_preference: soldier.language_preference,
+          volunteer_gender_preference: soldier.volunteer_gender_preference,
+          soldier_status: soldier.soldier_status,
+          has_special_requests: soldier.has_special_requests,
+        });
+
+        if (newCandidate) {
+          // Swap: replace the rank-2 match with the unused student
+          result[bestSwapIdx] = {
+            id: crypto.randomUUID(),
+            student_external_id: unusedStudent.contact_id,
+            soldier_external_id: oldMatch.soldier_external_id,
+            confidence_score: newCandidate.score,
+            match_rank: 2,
+            match_criteria: newCandidate.criteria,
+            status: 'suggested',
+            student: unusedStudent,
+            soldier: soldier,
+          };
+
+          // Update assignment tracking
+          studentAssignments.set(unusedStudent.contact_id, (studentAssignments.get(unusedStudent.contact_id) || 0) + 1);
+        }
+      }
+    }
+  }
+
   return result;
 }
 
