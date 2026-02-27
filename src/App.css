@@ -679,6 +679,55 @@ body {
   text-align: center;
 }
 
+/* Unassigned Students */
+.unassigned-students-section {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #bae6fd;
+}
+
+.unassigned-students-section h4 {
+  color: var(--danger);
+  margin-bottom: 0.75rem;
+  font-size: 0.95rem;
+}
+
+.unassigned-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.unassigned-table th {
+  background: #fef2f2;
+  color: var(--danger);
+  padding: 0.5rem 0.75rem;
+  text-align: right;
+  font-weight: 600;
+  border-bottom: 2px solid #fecaca;
+}
+
+.unassigned-table td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.unassigned-table tr:hover {
+  background: #fef2f2;
+}
+
+.unassigned-table .id-cell {
+  font-family: monospace;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.unassigned-table .reason-cell {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  max-width: 300px;
+}
+
 .matches-stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));

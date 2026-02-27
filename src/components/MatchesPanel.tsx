@@ -259,6 +259,36 @@ export default function MatchesPanel({
             </div>
           </div>
           <p className="summary-total">סה"כ <strong>{matchingSummary.totalMatches}</strong> התאמות נוצרו</p>
+
+          {matchingSummary.unassignedStudents.length > 0 && (
+            <div className="unassigned-students-section">
+              <h4>סטודנטים שלא שובצו ({matchingSummary.unassignedStudents.length})</h4>
+              <table className="unassigned-table">
+                <thead>
+                  <tr>
+                    <th>שם</th>
+                    <th>מזהה</th>
+                    <th>עיר</th>
+                    <th>שפת אם</th>
+                    <th>מגדר</th>
+                    <th>סיבה</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {matchingSummary.unassignedStudents.map((s) => (
+                    <tr key={s.contact_id}>
+                      <td>{s.name}</td>
+                      <td className="id-cell">{s.contact_id}</td>
+                      <td>{s.city}</td>
+                      <td>{s.motherTongue}</td>
+                      <td>{s.gender}</td>
+                      <td className="reason-cell">{s.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 

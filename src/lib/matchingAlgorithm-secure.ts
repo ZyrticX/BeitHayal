@@ -293,6 +293,16 @@ export function optimizeSecureMatches(
   return result;
 }
 
+// Detail for an unassigned student
+export interface UnassignedStudentDetail {
+  contact_id: string;
+  name: string;
+  city: string;
+  motherTongue: string;
+  gender: string;
+  reason: string;
+}
+
 // Summary returned after matching
 export interface MatchingSummary {
   totalStudents: number;
@@ -307,6 +317,7 @@ export interface MatchingSummary {
   highScoreMatches: number;  // score >= 70
   mediumScoreMatches: number; // score 30-69
   lowScoreMatches: number;   // score < 30
+  unassignedStudents: UnassignedStudentDetail[];
 }
 
 // Main function to run secure matching
@@ -343,6 +354,45 @@ export function runSecureMatchingAlgorithm(
 
   const totalScore = optimizedMatches.reduce((s, m) => s + m.confidence_score, 0);
 
+  // Analyze unassigned students
+  const unassignedStudents: UnassignedStudentDetail[] = [];
+  for (const student of availableStudents) {
+    if (!usedStudentIds.has(student.contact_id)) {
+      // Find out why: check how many soldiers had this student as a candidate
+      let candidateCount = 0;
+      let maxScoreForStudent = 0;
+      for (const [, candidates] of allMatches) {
+        const asCandidate = candidates.find(c => c.student.contact_id === student.contact_id);
+        if (asCandidate) {
+          candidateCount++;
+          if (asCandidate.score > maxScoreForStudent) {
+            maxScoreForStudent = asCandidate.score;
+          }
+        }
+      }
+
+      const reasons: string[] = [];
+      if (candidateCount === 0) {
+        reasons.push('לא נמצא כמועמד לאף חייל');
+      } else {
+        reasons.push(`מועמד ל-${candidateCount} חיילים, ציון מקסימלי ${maxScoreForStudent}%`);
+      }
+      if (!student.city) reasons.push('חסרה עיר');
+      if (!student.mother_tongue_code) reasons.push('חסרה שפת אם');
+      if (!student.gender) reasons.push('חסר מגדר');
+      reasons.push('סטודנטים אחרים קיבלו עדיפות גבוהה יותר');
+
+      unassignedStudents.push({
+        contact_id: student.contact_id,
+        name: student.full_name || student.contact_id,
+        city: student.city || 'לא צוין',
+        motherTongue: student.mother_tongue || 'לא צוין',
+        gender: student.gender || 'לא צוין',
+        reason: reasons.join(' | '),
+      });
+    }
+  }
+
   const summary: MatchingSummary = {
     totalStudents: availableStudents.length,
     totalSoldiers: awaitingSoldiers.length,
@@ -356,6 +406,7 @@ export function runSecureMatchingAlgorithm(
     highScoreMatches: optimizedMatches.filter(m => m.confidence_score >= 70).length,
     mediumScoreMatches: optimizedMatches.filter(m => m.confidence_score >= 30 && m.confidence_score < 70).length,
     lowScoreMatches: optimizedMatches.filter(m => m.confidence_score < 30).length,
+    unassignedStudents,
   };
 
   console.log(`[Secure Matching] Summary:`, summary);
