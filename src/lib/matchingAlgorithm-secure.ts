@@ -1,5 +1,5 @@
 import type { LocalStudent, LocalSoldier, SecureMatch, MatchCriteria, EnrichedMatch } from './supabase-secure';
-import { getCityDistance, getDistanceScore } from './cityDistance';
+import { getDistanceScore } from './cityDistance';
 
 // ===========================================
 // Secure Matching Algorithm
