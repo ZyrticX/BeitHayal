@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Play, Download, CheckCircle, XCircle, RefreshCw, Filter, ChevronDown, ChevronUp, Shield, Cloud } from 'lucide-react';
 import type { LocalStudent, LocalSoldier, EnrichedMatch } from '../lib/supabase-secure';
 import { runSecureMatchingAlgorithm } from '../lib/matchingAlgorithm-secure';
@@ -388,9 +388,8 @@ export default function MatchesPanel({
             </thead>
             <tbody>
               {filteredMatches.map(match => (
-                <>
-                  <tr 
-                    key={match.id} 
+                <React.Fragment key={match.id}>
+                  <tr
                     className={`match-row ${match.status} ${expandedMatch === match.id ? 'expanded' : ''}`}
                     onClick={() => setExpandedMatch(expandedMatch === match.id ? null : match.id)}
                   >
@@ -548,7 +547,7 @@ export default function MatchesPanel({
                       </td>
                     </tr>
                   )}
-                </>
+                </React.Fragment>
               ))}
             </tbody>
           </table>

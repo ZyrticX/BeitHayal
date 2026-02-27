@@ -211,10 +211,8 @@ export function optimizeSecureMatches(
 
       assignedForSoldier.push(match);
 
-      // Update assignment count for rank 1 (primary)
-      if (rank === 1) {
-        studentAssignments.set(studentId, (studentAssignments.get(studentId) || 0) + 1);
-      }
+      // Update assignment count for both ranks (so distribution stays balanced)
+      studentAssignments.set(studentId, (studentAssignments.get(studentId) || 0) + 1);
     }
 
     result.push(...assignedForSoldier);
@@ -254,20 +252,7 @@ export function optimizeSecureMatches(
         const soldier = oldMatch.soldier!;
 
         // Calculate score for the unused student with this soldier
-        const newCandidate = calculateSecureMatch(unusedStudent, {
-          contact_id: oldMatch.soldier_external_id,
-          gender: soldier.gender,
-          city: soldier.city,
-          city_code: soldier.city_code,
-          region: soldier.region,
-          origin_country: soldier.origin_country,
-          mother_tongue: soldier.mother_tongue,
-          mother_tongue_code: soldier.mother_tongue_code,
-          language_preference: soldier.language_preference,
-          volunteer_gender_preference: soldier.volunteer_gender_preference,
-          soldier_status: soldier.soldier_status,
-          has_special_requests: soldier.has_special_requests,
-        });
+        const newCandidate = calculateSecureMatch(unusedStudent, soldier);
 
         if (newCandidate) {
           // Swap: replace the rank-2 match with the unused student
@@ -283,7 +268,12 @@ export function optimizeSecureMatches(
             soldier: soldier,
           };
 
-          // Update assignment tracking
+          // Update assignment tracking: add for new, decrement for old
+          const oldStudentId = oldMatch.student_external_id;
+          const oldCount = studentAssignments.get(oldStudentId) || 0;
+          if (oldCount > 0) {
+            studentAssignments.set(oldStudentId, oldCount - 1);
+          }
           studentAssignments.set(unusedStudent.contact_id, (studentAssignments.get(unusedStudent.contact_id) || 0) + 1);
         }
       }

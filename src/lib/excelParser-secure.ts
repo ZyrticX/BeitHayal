@@ -110,17 +110,17 @@ export async function parseStudentsFile(file: File): Promise<ParseResult<LocalSt
         volunteer_status: (row['סטטוס מתנדב/ת'] as string)?.trim() || null,
       };
       
+      data.push(student);
+
       // Track unresolved cities for Google Maps API fallback
       if (city && !cityInfo) {
-        unresolvedCities.push({ index: i, city: city.trim() });
+        unresolvedCities.push({ index: data.length - 1, city: city.trim() });
       }
 
       // Warn if language not in mapping
       if (motherTongue && !langCode) {
         warnings.push(`שורה ${i + 2}: שפה "${motherTongue}" לא נמצאה במיפוי`);
       }
-
-      data.push(student);
     }
 
     // Try to resolve unknown cities via Google Maps API
