@@ -41,7 +41,7 @@ export async function parseStudentsFile(file: File): Promise<ParseResult<LocalSt
 
   try {
     const buffer = await file.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: 'array' });
+    const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
 
     const sheetName = workbook.SheetNames.find(name =>
       name.includes('סטטוס') || name.includes('מתנדב')
@@ -185,7 +185,7 @@ export async function parseSoldiersFile(file: File): Promise<ParseResult<LocalSo
 
   try {
     const buffer = await file.arrayBuffer();
-    const workbook = XLSX.read(buffer, { type: 'array' });
+    const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
 
     const sheetName = workbook.SheetNames.find(name =>
       name.includes('חייל') || name.includes('סטטוס')

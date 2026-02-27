@@ -84,30 +84,12 @@ export function calculateSecureMatch(
   soldier: LocalSoldier
 ): MatchCandidate | null {
 
-  // === Rule: Volunteer must be available ===
-  if (student.available_slots <= 0) {
-    return null;
-  }
-
   // === Check gender and language ===
   const genderMatch = checkGenderMatch(student.gender, soldier.volunteer_gender_preference);
   const languageMatch = checkLanguageMatch(student.mother_tongue_code, soldier.mother_tongue_code);
 
-  // === Rule: Both gender AND language don't match → no match ===
-  if (!genderMatch && !languageMatch) {
-    return null;
-  }
-
   // === Calculate distance score (0-100) ===
   const distanceScore = getDistanceScore(student.city || '', soldier.city || '');
-
-  // Also get real distance for display
-  const realDistance = getCityDistance(student.city || '', soldier.city || '');
-
-  // If real distance > 150km, reject
-  if (realDistance !== null && realDistance > 150) {
-    return null;
-  }
 
   // === Calculate final score based on the table ===
   let finalScore: number;
@@ -118,12 +100,15 @@ export function calculateSecureMatch(
   } else if (!genderMatch && languageMatch) {
     // ❌ מגדר + ✅ שפה → ציון = 70 - (100 - מרחק)
     finalScore = 70 - (100 - distanceScore);
-  } else {
+  } else if (genderMatch && !languageMatch) {
     // ✅ מגדר + ❌ שפה → ציון = 60 - (100 - מרחק)
     finalScore = 60 - (100 - distanceScore);
+  } else {
+    // ❌ מגדר + ❌ שפה → low score but still a candidate
+    finalScore = 30 - (100 - distanceScore);
   }
 
-  // Ensure score is at least 1 (if we got here, it's a valid match)
+  // Ensure score is at least 1 (everyone should get at least one match)
   finalScore = Math.max(1, Math.round(finalScore));
 
   const criteria: MatchCriteria = {
@@ -192,7 +177,10 @@ export function optimizeSecureMatches(
     .sort((a, b) => a.candidates.length - b.candidates.length);
 
   for (const { candidates } of soldiersWithOptions) {
+    if (candidates.length === 0) continue;
+
     let rank = 1;
+    let assigned = false;
 
     for (const candidate of candidates) {
       const studentId = candidate.student.contact_id;
@@ -220,6 +208,7 @@ export function optimizeSecureMatches(
         // Update assignment count only for rank 1 (primary match)
         if (rank === 1) {
           studentAssignments.set(studentId, currentCount + 1);
+          assigned = true;
         }
 
         rank++;
@@ -227,6 +216,25 @@ export function optimizeSecureMatches(
         // Keep max 2 options per soldier
         if (rank > 2) break;
       }
+    }
+
+    // Fallback: if no match was created (all students full), force-assign best candidate
+    if (!assigned && candidates.length > 0) {
+      const best = candidates[0];
+      const match: EnrichedMatch = {
+        id: crypto.randomUUID(),
+        student_external_id: best.student.contact_id,
+        soldier_external_id: best.soldier.contact_id,
+        confidence_score: best.score,
+        match_rank: 1,
+        match_criteria: best.criteria,
+        status: 'suggested',
+        student: best.student,
+        soldier: best.soldier,
+      };
+      result.push(match);
+      const currentCount = studentAssignments.get(best.student.contact_id) || 0;
+      studentAssignments.set(best.student.contact_id, currentCount + 1);
     }
   }
 
@@ -238,15 +246,9 @@ export function runSecureMatchingAlgorithm(
   students: LocalStudent[],
   soldiers: LocalSoldier[]
 ): EnrichedMatch[] {
-  // Filter only available students and soldiers awaiting placement
-  const availableStudents = students.filter(s =>
-    s.volunteer_status === 'ממתין לשיבוץ' &&
-    s.available_slots > 0
-  );
-
-  const awaitingSoldiers = soldiers.filter(s =>
-    s.soldier_status === 'מחכה לשיבוץ' || s.soldier_status === 'ממתין לשיחה'
-  );
+  // Include all students and soldiers - everyone gets a match
+  const availableStudents = students;
+  const awaitingSoldiers = soldiers;
 
   console.log(`[Secure Matching] ${availableStudents.length} students, ${awaitingSoldiers.length} soldiers`);
 
