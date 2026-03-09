@@ -37,7 +37,7 @@ export async function parseStudentsFile(file: File): Promise<ParseResult<LocalSt
   const errors: string[] = [];
   const warnings: string[] = [];
   const data: LocalStudent[] = [];
-  const unresolvedCities: { index: number; city: string }[] = [];
+  const unresolvedCities: { index: number; rowNum: number; city: string }[] = [];
 
   try {
     const buffer = await file.arrayBuffer();
@@ -114,7 +114,7 @@ export async function parseStudentsFile(file: File): Promise<ParseResult<LocalSt
 
       // Track unresolved cities for Google Maps API fallback
       if (city && !cityInfo) {
-        unresolvedCities.push({ index: data.length - 1, city: city.trim() });
+        unresolvedCities.push({ index: data.length - 1, rowNum: i + 2, city: city.trim() });
       }
 
       // Warn if language not in mapping
@@ -146,7 +146,7 @@ export async function parseStudentsFile(file: File): Promise<ParseResult<LocalSt
       for (const failedCity of failed) {
         const rows = unresolvedCities
           .filter(u => u.city === failedCity)
-          .map(u => u.index + 2);
+          .map(u => u.rowNum);
         warnings.push(`שורות ${rows.join(', ')}: עיר "${failedCity}" לא נמצאה במיפוי ולא ב-Google Maps - המרחק לא יחושב`);
       }
     } else if (unresolvedCities.length > 0) {
@@ -155,7 +155,7 @@ export async function parseStudentsFile(file: File): Promise<ParseResult<LocalSt
       for (const city of uniqueCities) {
         const rows = unresolvedCities
           .filter(u => u.city === city)
-          .map(u => u.index + 2);
+          .map(u => u.rowNum);
         warnings.push(`שורות ${rows.join(', ')}: עיר "${city}" לא נמצאה במיפוי - המרחק לא יחושב`);
       }
       if (!isGeocodingAvailable()) {
@@ -181,7 +181,7 @@ export async function parseSoldiersFile(file: File): Promise<ParseResult<LocalSo
   const errors: string[] = [];
   const warnings: string[] = [];
   const data: LocalSoldier[] = [];
-  const unresolvedCities: { index: number; city: string }[] = [];
+  const unresolvedCities: { index: number; rowNum: number; city: string }[] = [];
 
   try {
     const buffer = await file.arrayBuffer();
@@ -254,7 +254,7 @@ export async function parseSoldiersFile(file: File): Promise<ParseResult<LocalSo
 
       // Track unresolved cities
       if (city && !cityInfo) {
-        unresolvedCities.push({ index: data.length - 1, city: city.trim() });
+        unresolvedCities.push({ index: data.length - 1, rowNum: i + 2, city: city.trim() });
       }
     }
 
@@ -279,7 +279,7 @@ export async function parseSoldiersFile(file: File): Promise<ParseResult<LocalSo
       for (const failedCity of failed) {
         const rows = unresolvedCities
           .filter(u => u.city === failedCity)
-          .map(u => u.index + 2);
+          .map(u => u.rowNum);
         warnings.push(`שורות ${rows.join(', ')}: עיר "${failedCity}" לא נמצאה במיפוי ולא ב-Google Maps - המרחק לא יחושב`);
       }
     } else if (unresolvedCities.length > 0) {
@@ -287,7 +287,7 @@ export async function parseSoldiersFile(file: File): Promise<ParseResult<LocalSo
       for (const city of uniqueCities) {
         const rows = unresolvedCities
           .filter(u => u.city === city)
-          .map(u => u.index + 2);
+          .map(u => u.rowNum);
         warnings.push(`שורות ${rows.join(', ')}: עיר "${city}" לא נמצאה במיפוי - המרחק לא יחושב`);
       }
       if (!isGeocodingAvailable()) {

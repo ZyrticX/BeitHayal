@@ -25,7 +25,7 @@ interface MatchCandidate {
   criteria: MatchCriteria;
 }
 
-// Language matching using codes
+// Language matching using codes - exact match only
 function checkLanguageMatch(
   studentLangCode: string | undefined,
   soldierLangCode: string | undefined
@@ -34,26 +34,7 @@ function checkLanguageMatch(
     return false;
   }
 
-  // Exact code match
-  if (studentLangCode === soldierLangCode) {
-    return true;
-  }
-
-  // Related language families (codes)
-  const languageFamilies: Record<string, string[]> = {
-    'slavic': ['RU', 'UK', 'BG', 'HR', 'PL'],
-    'romance': ['FR', 'ES', 'IT', 'PT', 'RO'],
-    'semitic': ['HE', 'AR'],
-    'germanic': ['DE', 'NL', 'DA'],
-  };
-
-  for (const [, codes] of Object.entries(languageFamilies)) {
-    if (codes.includes(studentLangCode) && codes.includes(soldierLangCode)) {
-      return true;
-    }
-  }
-
-  return false;
+  return studentLangCode === soldierLangCode;
 }
 
 // Gender preference matching
