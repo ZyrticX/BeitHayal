@@ -4,6 +4,7 @@ import type { LocalStudent, LocalSoldier, EnrichedMatch } from '../lib/supabase-
 import { runSecureMatchingAlgorithm } from '../lib/matchingAlgorithm-secure';
 import type { MatchingSummary } from '../lib/matchingAlgorithm-secure';
 import { exportMatchesToExcel } from '../lib/excelParser-secure';
+import { DEFAULT_SETTINGS, type MatchingSettings } from '../lib/settingsService';
 
 interface MatchesPanelProps {
   students: LocalStudent[];
@@ -11,6 +12,7 @@ interface MatchesPanelProps {
   matches: EnrichedMatch[];
   setMatches: (matches: EnrichedMatch[]) => void;
   setIsLoading: (loading: boolean) => void;
+  matchingSettings?: MatchingSettings;
 }
 
 type SortField = 'confidence_score' | 'match_rank' | 'student_city' | 'soldier_city' | 'language';
@@ -21,7 +23,8 @@ export default function MatchesPanel({
   soldiers,
   matches,
   setMatches,
-  setIsLoading
+  setIsLoading,
+  matchingSettings = DEFAULT_SETTINGS
 }: MatchesPanelProps) {
   const [filterStatus, setFilterStatus] = useState<string>('');
   const [filterRank, setFilterRank] = useState<string>('');
@@ -44,7 +47,7 @@ export default function MatchesPanel({
       await new Promise(resolve => setTimeout(resolve, 100));
 
       // Run SECURE matching algorithm (works with codes only)
-      const { matches: newMatches, summary } = runSecureMatchingAlgorithm(students, soldiers);
+      const { matches: newMatches, summary } = runSecureMatchingAlgorithm(students, soldiers, matchingSettings);
       setMatches(newMatches);
       setMatchingSummary(summary);
 

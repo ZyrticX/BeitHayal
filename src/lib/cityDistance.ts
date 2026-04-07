@@ -320,26 +320,46 @@ export async function getCityDistanceAsync(city1: string, city2: string): Promis
 }
 
 // Check if distance is within acceptable range
-export function isDistanceAcceptable(city1: string, city2: string, maxDistance: number = 150): boolean {
+export function isDistanceAcceptable(city1: string, city2: string, maxDistance = 150): boolean {
   const distance = getCityDistance(city1, city2);
   if (distance === null) return true; // If we can't calculate, don't reject
   return distance <= maxDistance;
 }
 
+interface DistanceConfig {
+  noPenaltyKm?: number;     // default: 5
+  penaltyDivisor?: number;  // default: 2
+  maxDistanceKm?: number;   // default: 150
+}
+
+// Get distance penalty (to subtract from match score)
+export function getDistancePenalty(city1: string, city2: string, config?: DistanceConfig): number {
+  const noPenaltyKm = config?.noPenaltyKm ?? 5;
+  const penaltyDivisor = config?.penaltyDivisor ?? 2;
+  const distance = getCityDistance(city1, city2);
+
+  if (distance === null) return 0; // Unknown distance, no penalty
+  if (distance <= noPenaltyKm) return 0;
+
+  return Math.round(distance / penaltyDivisor);
+}
+
+// Get raw distance between two cities (for display purposes)
+export function getRawDistance(city1: string, city2: string): number | null {
+  return getCityDistance(city1, city2);
+}
+
 // Get distance score (higher is better, 0-100)
-export function getDistanceScore(city1: string, city2: string): number {
+export function getDistanceScore(city1: string, city2: string, config?: DistanceConfig): number {
+  const noPenaltyKm = config?.noPenaltyKm ?? 5;
+  const penaltyDivisor = config?.penaltyDivisor ?? 2;
   const distance = getCityDistance(city1, city2);
 
   if (distance === null) return 50; // Unknown distance, neutral score
-  if (distance > 150) return 0; // Too far
-  if (distance <= 10) return 100; // Same city or very close
-  if (distance <= 30) return 90; // Very close
-  if (distance <= 50) return 80; // Close (preferred)
-  if (distance <= 75) return 60;
-  if (distance <= 100) return 40;
-  if (distance <= 150) return 20;
+  if (distance <= noPenaltyKm) return 100;
 
-  return 0;
+  const score = 100 - Math.round(distance / penaltyDivisor);
+  return Math.max(0, score);
 }
 
 // Resolve all unknown cities via Google Maps API (batch)

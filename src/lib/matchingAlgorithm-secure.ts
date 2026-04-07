@@ -1,5 +1,6 @@
 import type { LocalStudent, LocalSoldier, SecureMatch, MatchCriteria, EnrichedMatch } from './supabase-secure';
-import { getDistanceScore } from './cityDistance';
+import { getDistancePenalty, getDistanceScore } from './cityDistance';
+import { DEFAULT_SETTINGS, type MatchingSettings } from './settingsService';
 
 // ===========================================
 // Secure Matching Algorithm
@@ -9,12 +10,13 @@ import { getDistanceScore } from './cityDistance';
 // ┌──────────┬──────┬───────┬─────────────────────────────────┐
 // │ מגדר     │ שפה  │ פנוי  │ ציון סופי                       │
 // ├──────────┼──────┼───────┼─────────────────────────────────┤
-// │ ✅       │ ✅   │ ✅    │ אחוז מרחק (למשל 88%)           │
-// │ ❌       │ ✅   │ ✅    │ 70 - (100 - מרחק)               │
-// │ ✅       │ ❌   │ ✅    │ 60 - (100 - מרחק)               │
+// │ ✅       │ ✅   │ ✅    │ 100 - הפחתת מרחק               │
+// │ ❌       │ ✅   │ ✅    │ 70 - הפחתת מרחק                │
+// │ ✅       │ ❌   │ ✅    │ 60 - הפחתת מרחק                │
 // │ ❌       │ ❌   │ ✅    │ אין מאץ'                        │
 // │ כלשהו   │ כלשהו│ ❌    │ אין מאץ'                        │
 // └──────────┴──────┴───────┴─────────────────────────────────┘
+// הפחתת מרחק: עד 5 ק"מ = 0, מעל 5 ק"מ = מרחק / 2
 // עדיפות: מתנדב עם פחות חיילים
 // ===========================================
 
@@ -62,35 +64,45 @@ function checkGenderMatch(
 // Calculate match between student and soldier
 export function calculateSecureMatch(
   student: LocalStudent,
-  soldier: LocalSoldier
+  soldier: LocalSoldier,
+  settings: MatchingSettings = DEFAULT_SETTINGS
 ): MatchCandidate | null {
 
   // === Check gender and language ===
   const genderMatch = checkGenderMatch(student.gender, soldier.volunteer_gender_preference);
   const languageMatch = checkLanguageMatch(student.mother_tongue_code, soldier.mother_tongue_code);
 
-  // === Calculate distance score (0-100) ===
-  const distanceScore = getDistanceScore(student.city || '', soldier.city || '');
+  // === Distance config from settings ===
+  const distConfig = {
+    noPenaltyKm: settings.distanceNoPenaltyKm,
+    penaltyDivisor: settings.distancePenaltyDivisor,
+    maxDistanceKm: settings.maxDistanceKm,
+  };
+
+  // === Calculate distance penalty ===
+  const distancePenalty = getDistancePenalty(student.city || '', soldier.city || '', distConfig);
+  const distanceScore = getDistanceScore(student.city || '', soldier.city || '', distConfig);
 
   // === Calculate final score based on the table ===
   let finalScore: number;
+  let baseScore: number;
 
   if (genderMatch && languageMatch) {
-    // ✅ מגדר + ✅ שפה → ציון = אחוז מרחק
-    finalScore = distanceScore;
+    baseScore = settings.baseScoreFull;
   } else if (!genderMatch && languageMatch) {
-    // ❌ מגדר + ✅ שפה → ציון = 70 - (100 - מרחק)
-    finalScore = 70 - (100 - distanceScore);
+    baseScore = settings.baseScoreLanguageOnly;
   } else if (genderMatch && !languageMatch) {
-    // ✅ מגדר + ❌ שפה → ציון = 60 - (100 - מרחק)
-    finalScore = 60 - (100 - distanceScore);
+    baseScore = settings.baseScoreGenderOnly;
   } else {
-    // ❌ מגדר + ❌ שפה → low score but still a candidate
-    finalScore = 30 - (100 - distanceScore);
+    // ❌ מגדר + ❌ שפה → אין מאץ'
+    return null;
   }
 
-  // Ensure score is at least 1 (everyone should get at least one match)
-  finalScore = Math.max(1, Math.round(finalScore));
+  // Final score = base score - distance penalty
+  finalScore = baseScore - distancePenalty;
+
+  // Ensure score is at least the configured minimum
+  finalScore = Math.max(settings.minFinalScore, Math.round(finalScore));
 
   const criteria: MatchCriteria = {
     language_match: languageMatch,
@@ -110,7 +122,8 @@ export function calculateSecureMatch(
 // Find all matches - keep ALL candidates so every student has a chance
 export function findAllSecureMatches(
   students: LocalStudent[],
-  soldiers: LocalSoldier[]
+  soldiers: LocalSoldier[],
+  settings: MatchingSettings = DEFAULT_SETTINGS
 ): Map<string, MatchCandidate[]> {
   const matchesBySoldier = new Map<string, MatchCandidate[]>();
 
@@ -118,7 +131,7 @@ export function findAllSecureMatches(
     const candidates: MatchCandidate[] = [];
 
     for (const student of students) {
-      const match = calculateSecureMatch(student, soldier);
+      const match = calculateSecureMatch(student, soldier, settings);
       if (match && match.score > 0) {
         candidates.push(match);
       }
@@ -133,11 +146,12 @@ export function findAllSecureMatches(
   return matchesBySoldier;
 }
 
-// Optimize matches - ensure every soldier gets exactly 2 matches
+// Optimize matches - ensure every soldier gets exactly N matches
 // and distribute students as evenly as possible
 export function optimizeSecureMatches(
   matchesBySoldier: Map<string, MatchCandidate[]>,
-  students: LocalStudent[]
+  students: LocalStudent[],
+  settings: MatchingSettings = DEFAULT_SETTINGS
 ): EnrichedMatch[] {
   const result: EnrichedMatch[] = [];
   const studentAssignments = new Map<string, number>();
@@ -168,9 +182,9 @@ export function optimizeSecureMatches(
       return b.score - a.score;
     });
 
-    // Assign 2 matches from the balanced list
+    // Assign N matches from the balanced list
     for (const candidate of sortedCandidates) {
-      if (assignedForSoldier.length >= 2) break;
+      if (assignedForSoldier.length >= settings.matchesPerSoldier) break;
 
       const studentId = candidate.student.contact_id;
 
@@ -233,7 +247,7 @@ export function optimizeSecureMatches(
         const soldier = oldMatch.soldier!;
 
         // Calculate score for the unused student with this soldier
-        const newCandidate = calculateSecureMatch(unusedStudent, soldier);
+        const newCandidate = calculateSecureMatch(unusedStudent, soldier, settings);
 
         if (newCandidate) {
           // Swap: replace the rank-2 match with the unused student
@@ -294,7 +308,8 @@ export interface MatchingSummary {
 // Main function to run secure matching
 export function runSecureMatchingAlgorithm(
   students: LocalStudent[],
-  soldiers: LocalSoldier[]
+  soldiers: LocalSoldier[],
+  settings: MatchingSettings = DEFAULT_SETTINGS
 ): { matches: EnrichedMatch[]; summary: MatchingSummary } {
   const availableStudents = students;
   const awaitingSoldiers = soldiers;
@@ -302,10 +317,10 @@ export function runSecureMatchingAlgorithm(
   console.log(`[Secure Matching] ${availableStudents.length} students, ${awaitingSoldiers.length} soldiers`);
 
   // Find all possible matches
-  const allMatches = findAllSecureMatches(availableStudents, awaitingSoldiers);
+  const allMatches = findAllSecureMatches(availableStudents, awaitingSoldiers, settings);
 
-  // Optimize - ensure every soldier gets 2 matches
-  const optimizedMatches = optimizeSecureMatches(allMatches, availableStudents);
+  // Optimize - ensure every soldier gets N matches
+  const optimizedMatches = optimizeSecureMatches(allMatches, availableStudents, settings);
 
   // Sort by confidence score
   optimizedMatches.sort((a, b) => b.confidence_score - a.confidence_score);
@@ -319,7 +334,7 @@ export function runSecureMatchingAlgorithm(
     usedStudentIds.add(m.student_external_id);
   }
 
-  const soldiersWithTwo = Array.from(matchesBySoldierId.values()).filter(c => c >= 2).length;
+  const soldiersWithTwo = Array.from(matchesBySoldierId.values()).filter(c => c >= settings.matchesPerSoldier).length;
   const soldiersWithOne = Array.from(matchesBySoldierId.values()).filter(c => c === 1).length;
   const soldiersWithNone = awaitingSoldiers.length - matchesBySoldierId.size;
 
@@ -374,9 +389,9 @@ export function runSecureMatchingAlgorithm(
     studentsUsed: usedStudentIds.size,
     studentsNotUsed: availableStudents.length - usedStudentIds.size,
     avgScore: optimizedMatches.length > 0 ? Math.round(totalScore / optimizedMatches.length) : 0,
-    highScoreMatches: optimizedMatches.filter(m => m.confidence_score >= 70).length,
-    mediumScoreMatches: optimizedMatches.filter(m => m.confidence_score >= 30 && m.confidence_score < 70).length,
-    lowScoreMatches: optimizedMatches.filter(m => m.confidence_score < 30).length,
+    highScoreMatches: optimizedMatches.filter(m => m.confidence_score >= settings.highScoreThreshold).length,
+    mediumScoreMatches: optimizedMatches.filter(m => m.confidence_score >= settings.mediumScoreThreshold && m.confidence_score < settings.highScoreThreshold).length,
+    lowScoreMatches: optimizedMatches.filter(m => m.confidence_score < settings.mediumScoreThreshold).length,
     unassignedStudents,
   };
 

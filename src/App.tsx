@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Upload, Users, UserCheck, FileSpreadsheet, BarChart3, Shield, LogOut, User } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Upload, Users, UserCheck, FileSpreadsheet, BarChart3, Shield, LogOut, User, Settings } from 'lucide-react';
 import { AuthProvider, useAuth } from './lib/AuthContext';
 import LoginPage from './components/LoginPage';
 import UploadPanel from './components/UploadPanel';
@@ -7,10 +7,12 @@ import StudentsTable from './components/StudentsTable';
 import SoldiersTable from './components/SoldiersTable';
 import MatchesPanel from './components/MatchesPanel';
 import Dashboard from './components/Dashboard';
+import SettingsPage from './components/SettingsPage';
 import type { LocalStudent, LocalSoldier, EnrichedMatch } from './lib/supabase-secure';
+import { loadSettings, DEFAULT_SETTINGS, type MatchingSettings } from './lib/settingsService';
 import './App.css';
 
-type TabType = 'dashboard' | 'upload' | 'students' | 'soldiers' | 'matches';
+type TabType = 'dashboard' | 'upload' | 'students' | 'soldiers' | 'matches' | 'settings';
 
 function MainApp() {
   const { user, signOut, loading } = useAuth();
@@ -19,6 +21,11 @@ function MainApp() {
   const [soldiers, setSoldiers] = useState<LocalSoldier[]>([]);
   const [matches, setMatches] = useState<EnrichedMatch[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [matchingSettings, setMatchingSettings] = useState<MatchingSettings>(DEFAULT_SETTINGS);
+
+  useEffect(() => {
+    loadSettings().then(setMatchingSettings);
+  }, []);
 
   // Show loading while checking auth
   if (loading) {
@@ -41,6 +48,7 @@ function MainApp() {
     { id: 'students' as TabType, label: 'סטודנטים', icon: Users, count: students.length },
     { id: 'soldiers' as TabType, label: 'חיילים', icon: UserCheck, count: soldiers.length },
     { id: 'matches' as TabType, label: 'התאמות', icon: FileSpreadsheet, count: matches.length },
+    { id: 'settings' as TabType, label: 'הגדרות', icon: Settings },
   ];
 
   const handleLogout = async () => {
@@ -135,7 +143,12 @@ function MainApp() {
             matches={matches}
             setMatches={setMatches}
             setIsLoading={setIsLoading}
+            matchingSettings={matchingSettings}
           />
+        )}
+
+        {activeTab === 'settings' && (
+          <SettingsPage onSettingsChanged={setMatchingSettings} />
         )}
       </main>
 
