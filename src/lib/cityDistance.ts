@@ -184,10 +184,11 @@ export function normalizeCityName(city: string): string {
     normalized = normalized.split(',')[0].trim();
   }
 
-  // Remove "קיבוץ " prefix for matching
+  // Remove "קיבוץ " prefix for matching, and also try adding it
   const withoutKibbutz = normalized.replace(/^קיבוץ\s+/, '').trim();
+  const withKibbutz = normalized.startsWith('קיבוץ') ? '' : `קיבוץ ${normalized}`;
 
-  const searchTerms = [normalized, withoutKibbutz];
+  const searchTerms = [normalized, withoutKibbutz, withKibbutz].filter(Boolean);
 
   // Check for exact match first (case-insensitive)
   for (const term of searchTerms) {
@@ -338,7 +339,7 @@ export function getDistancePenalty(city1: string, city2: string, config?: Distan
   const penaltyDivisor = config?.penaltyDivisor ?? 2;
   const distance = getCityDistance(city1, city2);
 
-  if (distance === null) return 0; // Unknown distance, no penalty
+  if (distance === null) return -1; // Signal: unknown distance
   if (distance <= noPenaltyKm) return 0;
 
   return Math.round(distance / penaltyDivisor);

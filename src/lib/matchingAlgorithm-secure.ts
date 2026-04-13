@@ -82,6 +82,7 @@ export function calculateSecureMatch(
   // === Calculate distance penalty ===
   const distancePenalty = getDistancePenalty(student.city || '', soldier.city || '', distConfig);
   const distanceScore = getDistanceScore(student.city || '', soldier.city || '', distConfig);
+  const unknownDistance = distancePenalty === -1;
 
   // === Calculate final score based on the table ===
   let finalScore: number;
@@ -98,8 +99,13 @@ export function calculateSecureMatch(
     return null;
   }
 
-  // Final score = base score - distance penalty
-  finalScore = baseScore - distancePenalty;
+  if (unknownDistance) {
+    // Unknown distance → cap at 50% of base score
+    finalScore = Math.round(baseScore * 0.5);
+  } else {
+    // Final score = base score - distance penalty
+    finalScore = baseScore - distancePenalty;
+  }
 
   // Ensure score is at least the configured minimum
   finalScore = Math.max(settings.minFinalScore, Math.round(finalScore));
